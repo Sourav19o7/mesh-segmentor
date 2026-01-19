@@ -1,0 +1,76 @@
+# Dockerfile for training
+# Base: NVIDIA CUDA 11.8 with Python 3.10
+
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-dev \
+    python3-pip \
+    python3.10-venv \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    awscli \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.10 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Create app directory
+WORKDIR /app
+
+# Install PyTorch with CUDA 11.8
+RUN pip install --no-cache-dir \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Install pytorch3d
+RUN pip install --no-cache-dir fvcore iopath \
+    && pip install --no-cache-dir --no-index pytorch3d \
+    -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu118_pyt210/download.html
+
+# Install training dependencies
+RUN pip install --no-cache-dir \
+    rhino3dm==8.4.0 \
+    trimesh==4.0.5 \
+    numpy==1.24.3 \
+    scipy==1.11.3 \
+    boto3==1.33.6 \
+    pyyaml==6.0.1 \
+    python-json-logger==2.0.7 \
+    tensorboard==2.15.1
+
+# Copy application code
+COPY configs/ ./configs/
+COPY models/ ./models/
+COPY preprocessing/ ./preprocessing/
+COPY training/ ./training/
+COPY utils/ ./utils/
+COPY scripts/ ./scripts/
+
+# Create data directories
+RUN mkdir -p data/processed/train data/processed/val \
+    && mkdir -p data/labels/train data/labels/val \
+    && mkdir -p checkpoints logs
+
+# Make scripts executable
+RUN chmod +x scripts/*.sh
+
+# Default command
+CMD ["python", "-m", "training.train", "--help"]

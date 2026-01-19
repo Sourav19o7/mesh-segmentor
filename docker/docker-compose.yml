@@ -1,0 +1,72 @@
+# Docker Compose for local development
+# Usage: docker-compose up -d
+
+version: "3.8"
+
+services:
+  # Inference API service
+  inference:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=text
+      - USE_S3=false
+      - PRELOAD_MODEL=true
+      - MAX_CONCURRENT_JOBS=2
+      - JOB_TIMEOUT=300
+    volumes:
+      # Mount local model for development
+      - ../checkpoints:/tmp/mesh-segmentor/models:ro
+      # Mount output directory
+      - ./outputs:/tmp/mesh-segmentor/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # LocalStack for S3 emulation (development only)
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=0
+      - DATA_DIR=/tmp/localstack/data
+    volumes:
+      - localstack-data:/tmp/localstack
+
+  # Initialize LocalStack with bucket
+  localstack-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      - localstack
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: /bin/sh -c
+    command: >
+      "
+      sleep 5 &&
+      aws --endpoint-url=http://localstack:4566 s3 mb s3://mesh-segmentor || true &&
+      echo 'LocalStack initialized'
+      "
+
+volumes:
+  localstack-data:
