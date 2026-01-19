@@ -1,0 +1,38 @@
+# Core ML
+torch==2.1.0
+torchvision==0.16.0
+pytorch3d==0.7.5
+
+# 3D Processing
+rhino3dm==8.4.0
+trimesh==4.0.5
+pyglet<2
+numpy==1.24.3
+scipy==1.11.3
+
+# API
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# AWS
+boto3==1.33.6
+botocore==1.33.6
+
+# Utilities
+pyyaml==6.0.1
+python-json-logger==2.0.7
+aiofiles==23.2.1
+httpx==0.25.2
+
+# Export
+pygltflib==1.16.1
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+isort==5.12.0
+mypy==1.7.1

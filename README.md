@@ -1,0 +1,265 @@
+# Mesh Segmentor - 3D Jewelry Segmentation SaaS
+
+Automatic semantic segmentation of 3D jewelry models (.3dm → segmented .glb)
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              MESH SEGMENTOR ARCHITECTURE                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                    ┌─────────────┐
+                                    │   CLIENT    │
+                                    │  (Upload    │
+                                    │   .3dm)     │
+                                    └──────┬──────┘
+                                           │
+                                           ▼
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                                    AWS CLOUD                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                           API LAYER (ECS Fargate)                                │ │
+│  │  ┌──────────────────────────────────────────────────────────────────────────┐   │ │
+│  │  │                         FastAPI Application                               │   │ │
+│  │  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                   │   │ │
+│  │  │  │ POST        │    │ GET         │    │ Background  │                   │   │ │
+│  │  │  │ /segment    │───▶│ /segment/   │◀───│ Workers     │                   │   │ │
+│  │  │  │             │    │ {job_id}    │    │ (asyncio)   │                   │   │ │
+│  │  │  └─────────────┘    └─────────────┘    └──────┬──────┘                   │   │ │
+│  │  └───────────────────────────────────────────────┼──────────────────────────┘   │ │
+│  └──────────────────────────────────────────────────┼──────────────────────────────┘ │
+│                                                     │                                 │
+│  ┌──────────────────────────────────────────────────┼──────────────────────────────┐ │
+│  │                      INFERENCE LAYER (ECS GPU)   │                               │ │
+│  │  ┌───────────────────────────────────────────────▼──────────────────────────┐   │ │
+│  │  │                    Inference Pipeline                                     │   │ │
+│  │  │                                                                           │   │ │
+│  │  │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────┐  │   │ │
+│  │  │  │ .3dm     │──▶│ trimesh  │──▶│ Point    │──▶│ Point    │──▶│ Mesh   │  │   │ │
+│  │  │  │ Loader   │   │ Convert  │   │ Sample   │   │Transform │   │ Split  │  │   │ │
+│  │  │  │(rhino3dm)│   │          │   │(pytorch3d│   │ Model    │   │        │  │   │ │
+│  │  │  └──────────┘   └──────────┘   │ 20k pts) │   │(N,3→N,C) │   └───┬────┘  │   │ │
+│  │  │                                └──────────┘   └──────────┘       │       │   │ │
+│  │  │                                                                  ▼       │   │ │
+│  │  │                                              ┌─────────────────────────┐ │   │ │
+│  │  │                                              │  GLB Export            │ │   │ │
+│  │  │                                              │  - Metal_01, Metal_02  │ │   │ │
+│  │  │                                              │  - Gem_01, Gem_02      │ │   │ │
+│  │  │                                              └───────────┬───────────┘ │   │ │
+│  │  └──────────────────────────────────────────────────────────┼─────────────┘   │ │
+│  └─────────────────────────────────────────────────────────────┼─────────────────┘ │
+│                                                                │                    │
+│  ┌─────────────────────────────────────────────────────────────┼─────────────────┐ │
+│  │                           STORAGE LAYER (S3)                │                  │ │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────▼───────────────┐ │ │
+│  │  │ s3://mesh-seg/  │  │ s3://mesh-seg/  │  │ s3://mesh-seg/                 │ │ │
+│  │  │ models/         │  │ datasets/       │  │ outputs/                       │ │ │
+│  │  │ └─checkpoint.pt │  │ ├─train/        │  │ └─{job_id}/                    │ │ │
+│  │  │                 │  │ ├─val/          │  │   └─segmented.glb              │ │ │
+│  │  │                 │  │ └─test/         │  │                                │ │ │
+│  │  └─────────────────┘  └─────────────────┘  └────────────────────────────────┘ │ │
+│  └───────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                     │
+│  ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│  │                         TRAINING LAYER (EC2 g5.xlarge)                        │ │
+│  │  ┌─────────────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  Training Pipeline                                                       │  │ │
+│  │  │  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────────┐  │  │ │
+│  │  │  │ Data       │──▶│ Point      │──▶│ Point      │──▶│ Checkpoint     │  │  │ │
+│  │  │  │ Loader     │   │ Augment    │   │ Transformer│   │ → S3           │  │  │ │
+│  │  │  │ (S3→Local) │   │            │   │ Train Loop │   │                │  │  │ │
+│  │  │  └────────────┘   └────────────┘   └────────────┘   └────────────────┘  │  │ │
+│  │  └─────────────────────────────────────────────────────────────────────────┘  │ │
+│  └───────────────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+                              DATA FLOW DIAGRAM
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                       │
+│   INPUT (.3dm)                    PROCESSING                         OUTPUT (.glb)   │
+│   ┌─────────┐                                                        ┌─────────────┐ │
+│   │ Rhino   │    ┌──────────┐    ┌──────────┐    ┌──────────┐       │ scene       │ │
+│   │ File    │───▶│ Extract  │───▶│ Sample   │───▶│ Predict  │       │ ├─Metal_01  │ │
+│   │         │    │ Meshes   │    │ 20k pts  │    │ Labels   │       │ ├─Metal_02  │ │
+│   └─────────┘    └──────────┘    └──────────┘    └────┬─────┘       │ ├─Gem_01    │ │
+│                                                       │              │ └─Gem_02    │ │
+│                                                       ▼              └─────────────┘ │
+│                                                  ┌──────────┐              ▲         │
+│                                                  │ Map to   │              │         │
+│                                                  │ Faces    │──────────────┘         │
+│                                                  └──────────┘                        │
+│                                                       │                              │
+│                                                       ▼                              │
+│                                              ┌────────────────┐                      │
+│                                              │ Connected      │                      │
+│                                              │ Components     │                      │
+│                                              │ (by volume)    │                      │
+│                                              └────────────────┘                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+                              POINT TRANSFORMER ARCHITECTURE
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                       │
+│  Input: (B, N, 3)                                                                    │
+│       │                                                                              │
+│       ▼                                                                              │
+│  ┌────────────────┐                                                                  │
+│  │ Input Embed    │  Linear(3 → 32) + BatchNorm + ReLU                              │
+│  │ (32 dim)       │                                                                  │
+│  └───────┬────────┘                                                                  │
+│          │                                                                           │
+│          ▼                                                                           │
+│  ┌────────────────┐     ┌─────────────────────────────────────────┐                 │
+│  │ PT Block 1     │────▶│ Point Transformer Layer                  │                 │
+│  │ (32 → 64)      │     │ ┌─────────┐ ┌─────────┐ ┌─────────────┐ │                 │
+│  └───────┬────────┘     │ │ Q,K,V   │ │Position │ │ Attention   │ │                 │
+│          │              │ │ Linear  │ │ Encoding│ │ Softmax     │ │                 │
+│          ▼              │ └─────────┘ └─────────┘ └─────────────┘ │                 │
+│  ┌────────────────┐     └─────────────────────────────────────────┘                 │
+│  │ PT Block 2     │                                                                  │
+│  │ (64 → 128)     │                                                                  │
+│  └───────┬────────┘                                                                  │
+│          │                                                                           │
+│          ▼                                                                           │
+│  ┌────────────────┐                                                                  │
+│  │ PT Block 3     │                                                                  │
+│  │ (128 → 256)    │                                                                  │
+│  └───────┬────────┘                                                                  │
+│          │                                                                           │
+│          ▼                                                                           │
+│  ┌────────────────┐                                                                  │
+│  │ PT Block 4     │                                                                  │
+│  │ (256 → 512)    │                                                                  │
+│  └───────┬────────┘                                                                  │
+│          │                                                                           │
+│          ▼                                                                           │
+│  ┌────────────────┐                                                                  │
+│  │ Segmentation   │  MLP: 512 → 256 → 128 → num_classes                             │
+│  │ Head           │                                                                  │
+│  └───────┬────────┘                                                                  │
+│          │                                                                           │
+│          ▼                                                                           │
+│  Output: (B, N, 3)   [background, metal, gem]                                        │
+│                                                                                       │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Repository Structure
+
+```
+mesh-segmentor/
+├── README.md                    # This file
+├── requirements.txt             # Python dependencies
+├── setup.py                     # Package installation
+├── pyproject.toml              # Build configuration
+│
+├── configs/                     # Configuration files
+│   ├── model_config.yaml       # Model hyperparameters
+│   ├── training_config.yaml    # Training settings
+│   └── inference_config.yaml   # Inference settings
+│
+├── data/                        # Data directory (gitignored)
+│   ├── raw/                    # Raw .3dm files
+│   ├── processed/              # Processed point clouds (.npy)
+│   └── labels/                 # Ground truth labels (.npy)
+│
+├── preprocessing/               # Data preprocessing pipeline
+│   ├── __init__.py
+│   ├── rhino_loader.py         # Load .3dm files using rhino3dm
+│   ├── mesh_converter.py       # Convert Rhino mesh → trimesh
+│   ├── point_sampler.py        # Sample points using pytorch3d
+│   └── dataset.py              # PyTorch Dataset class
+│
+├── models/                      # ML model implementations
+│   ├── __init__.py
+│   ├── point_transformer.py    # Point Transformer architecture
+│   ├── layers.py               # Custom layers (attention, etc.)
+│   └── losses.py               # Loss functions
+│
+├── training/                    # Training pipeline
+│   ├── __init__.py
+│   ├── trainer.py              # Training loop
+│   ├── metrics.py              # mIoU and other metrics
+│   ├── augmentations.py        # Point cloud augmentations
+│   └── train.py                # Main training script
+│
+├── inference/                   # Inference pipeline
+│   ├── __init__.py
+│   ├── predictor.py            # Model inference
+│   ├── mesh_segmenter.py       # Map predictions to mesh
+│   ├── component_splitter.py   # Split into named components
+│   └── glb_exporter.py         # Export to GLB format
+│
+├── api/                         # FastAPI application
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI app entry point
+│   ├── routes.py               # API endpoints
+│   ├── schemas.py              # Pydantic models
+│   ├── tasks.py                # Background task processing
+│   └── storage.py              # S3 integration
+│
+├── utils/                       # Utility functions
+│   ├── __init__.py
+│   ├── logging.py              # Logging configuration
+│   ├── s3.py                   # S3 upload/download
+│   └── config.py               # Config loading
+│
+├── docker/                      # Docker configurations
+│   ├── Dockerfile.inference    # Inference container
+│   ├── Dockerfile.training     # Training container
+│   └── docker-compose.yml      # Local development
+│
+├── aws/                         # AWS deployment configs
+│   ├── ecs-task-definition.json
+│   ├── iam-policy.json
+│   ├── ecr-setup.sh
+│   └── cloudformation.yaml
+│
+├── scripts/                     # Utility scripts
+│   ├── setup_ec2.sh            # EC2 instance setup
+│   ├── train.sh                # Training launcher
+│   ├── deploy.sh               # Deployment script
+│   └── download_model.sh       # Download model from S3
+│
+└── tests/                       # Unit tests
+    ├── test_preprocessing.py
+    ├── test_model.py
+    └── test_inference.py
+```
+
+## Quick Start
+
+### Local Development
+```bash
+pip install -r requirements.txt
+python -m api.main
+```
+
+### Training
+```bash
+./scripts/train.sh
+```
+
+### Deployment
+```bash
+./scripts/deploy.sh
+```
+
+## API Endpoints
+
+- `POST /segment` - Upload .3dm file, returns job_id
+- `GET /segment/{job_id}` - Get job status and result URL
+- `GET /health` - Health check
+
+## Classes
+
+- 0: Background
+- 1: Metal
+- 2: Gem
+
+## Output Naming Convention
+
+Components are named by class and index:
+- `Metal_01`, `Metal_02`, ... (ordered by volume, largest first)
+- `Gem_01`, `Gem_02`, ... (ordered by volume, largest first)

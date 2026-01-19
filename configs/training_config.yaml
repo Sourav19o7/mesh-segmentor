@@ -1,0 +1,67 @@
+# Training Configuration
+
+training:
+  # Basic settings
+  epochs: 100
+  batch_size: 8
+  num_workers: 4
+  pin_memory: true
+
+  # Optimizer
+  optimizer:
+    name: "AdamW"
+    lr: 0.001
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+
+  # Scheduler
+  scheduler:
+    name: "CosineAnnealingLR"
+    T_max: 100
+    eta_min: 0.00001
+
+  # Early stopping
+  early_stopping:
+    patience: 15
+    min_delta: 0.001
+    metric: "val_miou"
+
+  # Checkpointing
+  checkpoint:
+    save_every: 5
+    keep_best: 3
+    metric: "val_miou"
+
+  # Mixed precision
+  use_amp: true
+  grad_clip: 1.0
+
+# Data augmentation
+augmentation:
+  # Geometric
+  random_rotate: true
+  rotate_range: [-180, 180]  # degrees around Z axis
+  random_scale: true
+  scale_range: [0.8, 1.2]
+  random_translate: true
+  translate_range: 0.1  # fraction of bounding box
+
+  # Point dropout
+  random_dropout: true
+  dropout_ratio: 0.1
+
+  # Jitter
+  jitter_sigma: 0.01
+  jitter_clip: 0.05
+
+# Paths (relative to project root or S3)
+paths:
+  train_data: "s3://mesh-segmentor/datasets/train/"
+  val_data: "s3://mesh-segmentor/datasets/val/"
+  checkpoints: "s3://mesh-segmentor/models/checkpoints/"
+  logs: "s3://mesh-segmentor/logs/"
+
+# AWS settings
+aws:
+  region: "us-east-1"
+  s3_bucket: "mesh-segmentor"

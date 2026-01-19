@@ -1,0 +1,31 @@
+# Point Transformer Model Configuration
+
+model:
+  name: "PointTransformer"
+
+  # Input/Output
+  input_dim: 3
+  num_classes: 3  # background, metal, gem
+
+  # Architecture
+  embed_dim: 32
+  depths: [2, 2, 2, 2]  # Transformer blocks per stage
+  channels: [32, 64, 128, 256]
+  num_heads: [2, 4, 8, 8]
+
+  # Attention
+  k_neighbors: 16  # k-NN for local attention
+  dropout: 0.1
+  attention_dropout: 0.1
+
+  # Segmentation head
+  seg_head_channels: [256, 128, 64]
+
+# Point cloud settings
+point_cloud:
+  num_points: 20000
+  normalize: true
+  center: true
+
+# Class weights for imbalanced data (typical jewelry: lots of metal, few gems)
+class_weights: [0.1, 1.0, 2.0]  # background, metal, gem

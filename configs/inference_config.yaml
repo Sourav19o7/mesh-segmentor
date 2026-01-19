@@ -1,0 +1,67 @@
+# Inference Configuration
+
+inference:
+  # Model
+  model_path: "s3://mesh-segmentor/models/best_model.pt"
+  device: "cuda"  # cuda or cpu
+
+  # Point sampling
+  num_points: 20000
+  batch_size: 1  # inference is typically single-file
+
+  # Performance
+  use_amp: true  # Mixed precision inference
+
+  # Timeouts (seconds)
+  load_timeout: 60
+  inference_timeout: 120
+  export_timeout: 60
+
+  # Memory limits
+  max_vertices: 1000000  # Maximum vertices in input mesh
+  max_file_size_mb: 100
+
+# Output settings
+output:
+  format: "glb"
+  include_materials: true
+  compress: true
+
+# Naming convention
+naming:
+  metal_prefix: "Metal"
+  gem_prefix: "Gem"
+  separator: "_"
+  zero_pad: 2  # Metal_01, not Metal_1
+
+# Component detection
+components:
+  min_volume_ratio: 0.001  # Ignore components < 0.1% of total volume
+  sort_by: "volume"  # Sort by volume (largest first)
+
+# API settings
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+
+  # Job queue
+  max_concurrent_jobs: 4
+  job_timeout: 300  # 5 minutes
+  job_retention_hours: 24
+
+  # Upload limits
+  max_upload_size_mb: 100
+  allowed_extensions: [".3dm"]
+
+# S3 output
+s3:
+  output_bucket: "mesh-segmentor"
+  output_prefix: "outputs/"
+  presigned_url_expiry: 3600  # 1 hour
+
+# Logging
+logging:
+  level: "INFO"
+  format: "json"
+  include_request_id: true
