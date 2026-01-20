@@ -228,7 +228,7 @@ class PointTransformer(nn.Module):
 
         # Segmentation head
         B, N, C = x.shape
-        x_flat = x.view(B * N, C)
+        x_flat = x.contiguous().view(B * N, C)
 
         # Apply seg head with proper BN
         x = self.seg_head[0](x_flat)  # Linear

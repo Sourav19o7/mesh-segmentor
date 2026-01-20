@@ -1,0 +1,58 @@
+# Configuration for ShapeNetPart training
+# Use this to validate the pipeline before real jewelry data
+
+model:
+  name: "PointTransformer"
+  input_dim: 3
+  num_classes: 3  # Keep 3 classes (0=unused, 1=body, 2=accent)
+
+  # Smaller model for faster iteration
+  embed_dim: 32
+  depths: [2, 2, 2, 2]
+  channels: [32, 64, 128, 256]
+  num_heads: [2, 4, 8, 8]
+  k_neighbors: 16
+  dropout: 0.1
+
+point_cloud:
+  num_points: 2048  # ShapeNet native size (faster training)
+  normalize: true
+  center: true
+
+# Balanced weights since ShapeNet has better distribution
+# Class 0 is unused, but keep small weight
+class_weights: [0.01, 1.0, 1.0]
+
+training:
+  epochs: 50
+  batch_size: 16  # Can use larger batch with 2048 points
+  num_workers: 4
+  pin_memory: true
+
+  optimizer:
+    name: "AdamW"
+    lr: 0.001
+    weight_decay: 0.01
+
+  scheduler:
+    name: "CosineAnnealingLR"
+    T_max: 50
+    eta_min: 0.00001
+
+  early_stopping:
+    patience: 10
+    min_delta: 0.001
+    metric: "val_miou"
+
+  use_amp: true
+  grad_clip: 1.0
+
+augmentation:
+  random_rotate: true
+  rotate_range: [-180, 180]
+  random_scale: true
+  scale_range: [0.8, 1.2]
+  random_translate: true
+  translate_range: 0.1
+  jitter_sigma: 0.01
+  jitter_clip: 0.05

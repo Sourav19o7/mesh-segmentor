@@ -257,13 +257,22 @@ class RhinoLoader:
             vertices.append([v.X, v.Y, v.Z])
         vertices = np.array(vertices, dtype=np.float64)
 
-        # Get faces
+        # Get faces - rhino3dm 8.x returns tuples (A, B, C, D) directly
         faces = []
         for f in mesh.Faces:
-            if f.IsQuad:
-                faces.append([f.A, f.B, f.C, f.D])
+            # Handle both old API (face object) and new API (tuple)
+            if isinstance(f, tuple):
+                # New API: tuple of (A, B, C, D) where D == C for triangles
+                if len(f) == 4:
+                    faces.append([f[0], f[1], f[2], f[3]])
+                else:
+                    faces.append([f[0], f[1], f[2], f[2]])
             else:
-                faces.append([f.A, f.B, f.C, f.C])  # Pad to 4 for consistency
+                # Old API: face object with IsQuad attribute
+                if f.IsQuad:
+                    faces.append([f.A, f.B, f.C, f.D])
+                else:
+                    faces.append([f.A, f.B, f.C, f.C])  # Pad to 4 for consistency
 
         if len(faces) == 0:
             return None
@@ -297,22 +306,40 @@ class RhinoLoader:
                 for v in mesh.Vertices:
                     all_vertices.append([v.X, v.Y, v.Z])
 
-                # Extract faces with offset
+                # Extract faces with offset - handle both old and new rhino3dm API
                 for f in mesh.Faces:
-                    if f.IsQuad:
-                        all_faces.append([
-                            f.A + vertex_offset,
-                            f.B + vertex_offset,
-                            f.C + vertex_offset,
-                            f.D + vertex_offset,
-                        ])
+                    if isinstance(f, tuple):
+                        # New API: tuple of (A, B, C, D)
+                        if len(f) == 4:
+                            all_faces.append([
+                                f[0] + vertex_offset,
+                                f[1] + vertex_offset,
+                                f[2] + vertex_offset,
+                                f[3] + vertex_offset,
+                            ])
+                        else:
+                            all_faces.append([
+                                f[0] + vertex_offset,
+                                f[1] + vertex_offset,
+                                f[2] + vertex_offset,
+                                f[2] + vertex_offset,
+                            ])
                     else:
-                        all_faces.append([
-                            f.A + vertex_offset,
-                            f.B + vertex_offset,
-                            f.C + vertex_offset,
-                            f.C + vertex_offset,
-                        ])
+                        # Old API: face object with IsQuad attribute
+                        if f.IsQuad:
+                            all_faces.append([
+                                f.A + vertex_offset,
+                                f.B + vertex_offset,
+                                f.C + vertex_offset,
+                                f.D + vertex_offset,
+                            ])
+                        else:
+                            all_faces.append([
+                                f.A + vertex_offset,
+                                f.B + vertex_offset,
+                                f.C + vertex_offset,
+                                f.C + vertex_offset,
+                            ])
 
                 vertex_offset = len(all_vertices)
 

@@ -116,6 +116,11 @@ class PointCloudAugmentation:
         if self.dropout:
             points, labels = self._random_dropout(points, labels)
 
+        # Safety check: replace NaN/inf values
+        if not np.isfinite(points).all():
+            # Replace NaN/inf with zeros
+            points = np.nan_to_num(points, nan=0.0, posinf=0.0, neginf=0.0)
+
         return points.astype(np.float32), labels
 
     def _rotate_z(self, points: np.ndarray) -> np.ndarray:

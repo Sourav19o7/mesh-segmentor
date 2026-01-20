@@ -1,0 +1,116 @@
+# Label Mapping Configuration
+#
+# Define patterns to map object/layer names to class labels.
+# Patterns support wildcards (*) for flexible matching.
+#
+# Prefix patterns with "layer::" to match layer names only.
+# Otherwise, patterns match both object names and layer names.
+#
+# Classes:
+#   0 = background (non-jewelry elements)
+#   1 = metal (rings, bands, settings, prongs)
+#   2 = gem (diamonds, stones, crystals)
+
+metal:
+  # Metal types
+  - "*gold*"
+  - "*silver*"
+  - "*platinum*"
+  - "*palladium*"
+  - "*rhodium*"
+  - "*brass*"
+  - "*bronze*"
+  - "*copper*"
+  - "*titanium*"
+  - "*steel*"
+
+  # Jewelry parts (typically metal)
+  - "*ring*"
+  - "*band*"
+  - "*shank*"
+  - "*setting*"
+  - "*prong*"
+  - "*bezel*"
+  - "*basket*"
+  - "*bail*"
+  - "*clasp*"
+  - "*chain*"
+  - "*hoop*"
+  - "*post*"
+  - "*back*"
+  - "*mount*"
+  - "*gallery*"
+  - "*head*"
+  - "*crown*"
+  - "*collet*"
+  - "*frame*"
+  - "*body*"
+  - "*base*"
+
+  # Layer patterns
+  - "layer::metal*"
+  - "layer::gold*"
+  - "layer::silver*"
+  - "layer::platinum*"
+  - "layer::jewelry*"
+  - "layer::ring*"
+
+gem:
+  # Gemstone types
+  - "*diamond*"
+  - "*ruby*"
+  - "*sapphire*"
+  - "*emerald*"
+  - "*topaz*"
+  - "*amethyst*"
+  - "*opal*"
+  - "*pearl*"
+  - "*garnet*"
+  - "*peridot*"
+  - "*aquamarine*"
+  - "*tourmaline*"
+  - "*tanzanite*"
+  - "*citrine*"
+  - "*onyx*"
+  - "*turquoise*"
+  - "*jade*"
+  - "*alexandrite*"
+  - "*spinel*"
+  - "*zircon*"
+
+  # Generic gem terms
+  - "*gem*"
+  - "*stone*"
+  - "*crystal*"
+  - "*cubic*"
+  - "*cz*"
+  - "*moissanite*"
+  - "*brilliant*"
+
+  # Position terms (usually gems)
+  - "*center*"
+  - "*accent*"
+  - "*side_stone*"
+  - "*halo*"
+  - "*pave*"
+
+  # Layer patterns
+  - "layer::gem*"
+  - "layer::stone*"
+  - "layer::diamond*"
+
+background:
+  # Construction/helper geometry
+  - "*helper*"
+  - "*construction*"
+  - "*reference*"
+  - "*guide*"
+  - "*temp*"
+  - "*delete*"
+  - "*hide*"
+
+  # Layer patterns
+  - "layer::helper*"
+  - "layer::construction*"
+  - "layer::reference*"
+  - "layer::default"

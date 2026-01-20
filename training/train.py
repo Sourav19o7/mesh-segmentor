@@ -24,6 +24,12 @@ AWS EC2 Usage:
 import argparse
 import sys
 import os
+
+# Configure MPS memory BEFORE importing torch
+# Allow MPS to use up to 25GB of memory
+os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.8")  # 80% of available memory
+os.environ.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO", "0.0")   # No low watermark
+
 import torch
 
 # Add project root to path
@@ -121,14 +127,20 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda",
-        help="Device (cuda or cpu)",
+        default="auto",
+        help="Device (auto, cuda, mps, or cpu)",
     )
     parser.add_argument(
         "--amp", action="store_true", default=True, help="Use mixed precision"
     )
     parser.add_argument(
         "--no-amp", action="store_false", dest="amp", help="Disable mixed precision"
+    )
+    parser.add_argument(
+        "--mps-memory-fraction",
+        type=float,
+        default=0.8,
+        help="Fraction of system memory MPS can use (default: 0.8 = 80%%)",
     )
 
     # Logging
@@ -155,14 +167,35 @@ def main():
     logger.info("=" * 60)
 
     # Device setup
-    if args.device == "cuda" and not torch.cuda.is_available():
+    if args.device == "auto":
+        if torch.cuda.is_available():
+            args.device = "cuda"
+        elif torch.backends.mps.is_available():
+            args.device = "mps"
+        else:
+            args.device = "cpu"
+    elif args.device == "cuda" and not torch.cuda.is_available():
         logger.warning("CUDA not available, falling back to CPU")
+        args.device = "cpu"
+    elif args.device == "mps" and not torch.backends.mps.is_available():
+        logger.warning("MPS not available, falling back to CPU")
         args.device = "cpu"
 
     logger.info(f"Device: {args.device}")
     if args.device == "cuda":
         logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
         logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+    elif args.device == "mps":
+        logger.info("Using Apple Silicon GPU (MPS)")
+        # Configure MPS memory allocation
+        memory_fraction = args.mps_memory_fraction
+        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = str(memory_fraction)
+        os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = "0.0"
+        logger.info(f"MPS memory limit: {memory_fraction * 100:.0f}% of system memory (~{memory_fraction * 36:.0f} GB on 36GB system)")
+        # Disable AMP for MPS (not fully supported)
+        if args.amp:
+            logger.info("Disabling AMP for MPS device")
+            args.amp = False
 
     # Create datasets
     logger.info("Creating datasets...")

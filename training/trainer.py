@@ -83,7 +83,7 @@ class Trainer:
         """
         self.model = model.to(device)
         self.optimizer = optimizer
-        self.criterion = criterion
+        self.criterion = criterion.to(device)
         self.device = device
         self.scheduler = scheduler
         self.num_classes = num_classes
@@ -168,14 +168,31 @@ class Trainer:
             history["lr"].append(current_lr)
 
             # Log epoch summary
+            logger.info("=" * 70)
             logger.info(
-                f"Epoch {epoch + 1}/{epochs} | "
-                f"Train Loss: {train_metrics['loss']:.4f} | "
-                f"Train mIoU: {train_metrics['miou']:.4f} | "
-                f"Val Loss: {val_metrics['loss']:.4f} | "
-                f"Val mIoU: {val_metrics['miou']:.4f} | "
+                f"Epoch {epoch + 1}/{epochs} Complete | "
+                f"Time: {train_metrics.get('epoch_time', 0):.1f}s | "
                 f"LR: {current_lr:.6f}"
             )
+            logger.info(
+                f"  Train -> Loss: {train_metrics['loss']:.4f} | "
+                f"mIoU: {train_metrics['miou']:.4f} | "
+                f"Accuracy: {train_metrics.get('accuracy', 0):.4f}"
+            )
+            logger.info(
+                f"  Val   -> Loss: {val_metrics['loss']:.4f} | "
+                f"mIoU: {val_metrics['miou']:.4f} | "
+                f"Accuracy: {val_metrics.get('accuracy', 0):.4f}"
+            )
+            # Log per-class IoU if available
+            if 'class_iou' in val_metrics:
+                class_names = {0: 'Background', 1: 'Metal', 2: 'Gem'}
+                iou_str = " | ".join(
+                    f"{class_names.get(i, f'Class{i}')}: {iou:.3f}"
+                    for i, iou in enumerate(val_metrics['class_iou'])
+                )
+                logger.info(f"  Val IoU per class -> {iou_str}")
+            logger.info("=" * 70)
 
             # Learning rate scheduling
             if self.scheduler:
@@ -209,7 +226,10 @@ class Trainer:
         self.model.train()
         accumulator = MetricsAccumulator(self.num_classes)
 
+        num_batches = len(train_loader)
         epoch_start = time.time()
+        running_loss = 0.0
+
         for batch_idx, (points, labels) in enumerate(train_loader):
             # Move to device
             points = points.to(self.device)
@@ -250,14 +270,22 @@ class Trainer:
             # Update metrics
             predictions = logits.argmax(dim=-1)
             accumulator.update(predictions, labels, loss.item())
+            running_loss += loss.item()
 
             self.global_step += 1
 
-            # Log batch progress
+            # Log batch progress with progress percentage
             if (batch_idx + 1) % self.log_interval == 0:
-                logger.debug(
-                    f"Batch {batch_idx + 1}/{len(train_loader)} | "
-                    f"Loss: {loss.item():.4f}"
+                progress = (batch_idx + 1) / num_batches * 100
+                avg_loss = running_loss / (batch_idx + 1)
+                elapsed = time.time() - epoch_start
+                batches_per_sec = (batch_idx + 1) / elapsed if elapsed > 0 else 0
+                eta = (num_batches - batch_idx - 1) / batches_per_sec if batches_per_sec > 0 else 0
+
+                logger.info(
+                    f"  [{progress:5.1f}%] Batch {batch_idx + 1}/{num_batches} | "
+                    f"Loss: {loss.item():.4f} | Avg Loss: {avg_loss:.4f} | "
+                    f"Speed: {batches_per_sec:.1f} batch/s | ETA: {eta:.0f}s"
                 )
 
         epoch_time = time.time() - epoch_start

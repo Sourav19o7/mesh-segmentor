@@ -2,8 +2,8 @@
 Split labeled mesh into named connected components.
 
 Naming convention:
-- Metal_01, Metal_02, ... (ordered by volume, largest first)
-- Gem_01, Gem_02, ... (ordered by volume, largest first)
+- Metal 01, Metal 02, ... (ordered by volume, largest first)
+- Gem 01, Gem 02, ... (ordered by volume, largest first)
 
 Each connected component of the same class gets a unique index.
 """
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 class SegmentedComponent:
     """A single segmented mesh component."""
 
-    name: str  # e.g., "Metal_01", "Gem_02"
+    name: str  # e.g., "Metal 01", "Gem 02"
     class_id: int  # 0=background, 1=metal, 2=gem
     class_name: str  # "background", "metal", "gem"
     mesh: trimesh.Trimesh  # The component mesh
@@ -39,7 +39,7 @@ class ComponentSplitter:
     1. Group faces by label
     2. Find connected components within each label group
     3. Sort components by volume (largest first)
-    4. Assign names: Metal_01, Metal_02, Gem_01, etc.
+    4. Assign names: Metal 01, Metal 02, Gem 01, etc.
 
     Example:
         splitter = ComponentSplitter()
@@ -64,7 +64,7 @@ class ComponentSplitter:
         Args:
             min_volume_ratio: Minimum component volume as fraction of total
             include_background: Whether to include background components
-            zero_pad: Zero-padding for index (2 = Metal_01, 3 = Metal_001)
+            zero_pad: Zero-padding for index (2 = Metal 01, 3 = Metal 001)
         """
         self.min_volume_ratio = min_volume_ratio
         self.include_background = include_background
@@ -128,7 +128,7 @@ class ComponentSplitter:
             prefix = self.CLASS_PREFIXES[class_id]
             for idx, (face_indices, volume) in enumerate(class_components, 1):
                 # Generate name with zero-padded index
-                name = f"{prefix}_{idx:0{self.zero_pad}d}"
+                name = f"{prefix} {idx:0{self.zero_pad}d}"
 
                 # Extract submesh
                 submesh = self._extract_submesh(mesh, face_indices)
@@ -329,7 +329,7 @@ def merge_small_components(
 
         # Re-index kept components
         for idx, comp in enumerate(kept, 1):
-            comp.name = f"{ComponentSplitter.CLASS_PREFIXES[class_id]}_{idx:02d}"
+            comp.name = f"{ComponentSplitter.CLASS_PREFIXES[class_id]} {idx:02d}"
 
         result.extend(kept)
 

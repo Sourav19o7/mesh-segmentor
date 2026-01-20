@@ -247,10 +247,12 @@ class MetricsAccumulator:
         result = {
             "miou": mean_iou,
             "accuracy": accuracy,
+            "class_iou": [per_class_iou[i].item() for i in range(self.num_classes)],
         }
 
         # Per-class metrics
         class_names = ["background", "metal", "gem"]
+        class_accs = []
         for i in range(self.num_classes):
             name = class_names[i] if i < len(class_names) else f"class_{i}"
             result[f"iou_{name}"] = per_class_iou[i].item()
@@ -259,12 +261,19 @@ class MetricsAccumulator:
             class_total = self.confusion_matrix[i, :].sum().item()
             if class_total > 0:
                 class_correct = self.confusion_matrix[i, i].item()
-                result[f"acc_{name}"] = class_correct / class_total
+                class_acc = class_correct / class_total
             else:
-                result[f"acc_{name}"] = 0.0
+                class_acc = 0.0
+
+            result[f"acc_{name}"] = class_acc
+            class_accs.append(class_acc)
+
+        result["class_accuracy"] = class_accs
 
         # Average loss
         if self.num_samples > 0:
             result["loss"] = self.total_loss / self.num_samples
+        else:
+            result["loss"] = 0.0
 
         return result
