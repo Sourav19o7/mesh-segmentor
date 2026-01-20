@@ -82,3 +82,7 @@ htmlcov/
 
 # mypy
 .mypy_cache/
+
+
+# training data
+*.npy

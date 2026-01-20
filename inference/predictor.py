@@ -57,14 +57,21 @@ class Predictor:
             use_amp: Use automatic mixed precision
             cache_dir: Directory for caching downloaded models
         """
-        self.device = device if torch.cuda.is_available() else "cpu"
+        # Device detection with MPS support
+        if device == "cuda" and torch.cuda.is_available():
+            self.device = "cuda"
+        elif device == "mps" and torch.backends.mps.is_available():
+            self.device = "mps"
+        elif device in ("cuda", "mps"):
+            logger.warning(f"Requested device {device} not available, falling back to CPU")
+            self.device = "cpu"
+        else:
+            self.device = device
+
         self.num_classes = num_classes
-        self.use_amp = use_amp and self.device == "cuda"
+        self.use_amp = use_amp and self.device == "cuda"  # AMP only for CUDA
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-        if self.device != device:
-            logger.warning(f"Requested device {device} not available, using {self.device}")
 
         # Load model
         self.model = self._load_model(model_path, model_size)
@@ -283,3 +290,108 @@ class BatchPredictor:
                 results.append(labels)
 
         return results
+
+
+def main():
+    """CLI for running inference on 3dm files."""
+    import argparse
+    import sys
+    import os
+
+    # Add project root to path
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    from inference.mesh_segmenter import MeshSegmenter
+    from inference.component_splitter import ComponentSplitter
+    from inference.glb_exporter import GLBExporter
+    from preprocessing.rhino_loader import RhinoLoader
+    from preprocessing.mesh_converter import MeshConverter
+    from utils.logging import setup_logging
+    import trimesh
+
+    parser = argparse.ArgumentParser(description="Run inference on a 3dm file")
+    parser.add_argument("--input", "-i", type=str, required=True, help="Input .3dm file")
+    parser.add_argument("--output", "-o", type=str, required=True, help="Output .glb file")
+    parser.add_argument("--model", "-m", type=str, default="checkpoints/best_model.pt", help="Model checkpoint path")
+    parser.add_argument("--device", type=str, default="auto", help="Device (auto, cuda, mps, cpu)")
+    parser.add_argument("--model-size", type=str, default="small", help="Model size (small, base, medium, large)")
+    parser.add_argument("--num-points", type=int, default=20000, help="Number of points for inference")
+
+    args = parser.parse_args()
+
+    setup_logging(level="INFO", format_type="text")
+
+    # Auto-detect device
+    if args.device == "auto":
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+    else:
+        device = args.device
+
+    logger.info(f"Using device: {device}")
+    logger.info(f"Loading model from: {args.model}")
+
+    # Create predictor
+    predictor = Predictor(
+        model_path=args.model,
+        device=device,
+        model_size=args.model_size,
+        use_amp=(device == "cuda"),
+    )
+
+    # Create segmenter
+    segmenter = MeshSegmenter(
+        predictor=predictor,
+        num_points=args.num_points,
+    )
+
+    # Load and convert 3dm file
+    logger.info(f"Loading: {args.input}")
+    loader = RhinoLoader()
+    converter = MeshConverter()
+
+    geometries = loader.load(args.input)
+    logger.info(f"Loaded {len(geometries)} geometries")
+
+    # Convert to mesh
+    meshes = []
+    for geom in geometries:
+        mesh = converter.convert(geom)
+        if mesh is not None:
+            meshes.append(mesh)
+
+    if not meshes:
+        logger.error("No meshes found in file")
+        return
+
+    # Combine meshes
+    combined_mesh = trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
+    logger.info(f"Combined mesh: {len(combined_mesh.vertices)} vertices, {len(combined_mesh.faces)} faces")
+
+    # Segment
+    logger.info("Running segmentation...")
+    face_labels = segmenter.segment(combined_mesh)
+
+    # Split into components
+    logger.info("Splitting into components...")
+    splitter = ComponentSplitter()
+    components = splitter.split(combined_mesh, face_labels)
+
+    logger.info(f"Found {len(components)} components:")
+    for comp in components:
+        logger.info(f"  - {comp.name}: {comp.face_count} faces, volume={comp.volume:.4f}")
+
+    # Export to GLB
+    logger.info(f"Exporting to: {args.output}")
+    exporter = GLBExporter()
+    exporter.export(components, args.output)
+
+    logger.info("Done!")
+
+
+if __name__ == "__main__":
+    main()

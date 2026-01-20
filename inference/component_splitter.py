@@ -285,11 +285,14 @@ class ComponentSplitter:
             process=False,
         )
 
-        # Copy vertex colors if present
-        if mesh.visual.vertex_colors is not None:
-            submesh.visual.vertex_colors = mesh.visual.vertex_colors[
-                unique_vertices
-            ]
+        # Copy vertex colors if present (handle both ColorVisuals and TextureVisuals)
+        if hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None:
+            try:
+                submesh.visual.vertex_colors = mesh.visual.vertex_colors[
+                    unique_vertices
+                ]
+            except (AttributeError, IndexError):
+                pass  # Skip if vertex colors can't be copied
 
         return submesh
 
